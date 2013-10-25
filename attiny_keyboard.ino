@@ -97,6 +97,12 @@ void initToneGenerator(void)
 	TCNT1 = 0;
 	// Reset the prescaler
 	GTCCR = _BV(PSR1);
+	// Reset the Counters
+	OCR1A = 255;
+	OCR1B = 255;
+	OCR1C = 255;
+	// Disable the interrupt
+	TIMSK = _BV(OCIE1A);
 	
 	// Initially don't make a sound
 	setToneFrequency(0);
