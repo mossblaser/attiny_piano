@@ -1,23 +1,11 @@
-int sensorPin = A1;    // select the input pin for the potentiometer
-int sensorValue = 0;  // variable to store the value coming from the sensor
 
-double keymap[] = { 1.0/0.0 // inf
-                  , 0.992
-                  , 2.196
-                  , 0.683322459222
-                  , 3.87
-                  , 0.789600987248
-                  , 1.40100890208
-                  , 0.58077545372
-                  , 8.19
-                  , 0.884826835112
-                  , 1.73168110919
-                  , 0.630700728701
-                  , 2.62813432836
-                  , 0.720169202924
-                  , 1.19635619414
-                  , 0.542318178258
-                  };
+#define NUM_BANKS 3
+
+const int bank_pins[NUM_BANKS] = {A1, A2, A3};
+
+#include "bank0_keyboard.h"
+#include "bank1_keyboard.h"
+#include "bank2_keyboard.h"
 
 int tones[] = {
 880
@@ -38,71 +26,51 @@ int tones[] = {
 ,2093
 };
 
-//void setup() {
-//	// declare the ledPin as an OUTPUT:
-//	//Serial.begin(9600); 
-//	
-//	tone(tonePin, 1000);
-//	delay(1000);
-//	noTone(tonePin);
-//}
-//
-//void loop() {
-//	// read the value from the sensor:
-//	sensorValue = analogRead(sensorPin);
-//	double resistance = 0.998/((double)sensorValue / 1024.0) - 0.998;
-//	double closest_delta;
-//	int    closest = -1;
-//	for (int i = 0; i< 1<<4; i++) {
-//		double delta = abs(keymap[i] - resistance);
-//		if (closest == -1 || closest_delta > delta) {
-//			closest = i;
-//			closest_delta = delta;
-//		}
-//	}
-//	//Serial.println(closest);
-//	if (closest == 0)
-//		noTone(tonePin);
-//	else
-//		tone(tonePin, (tones[closest]));
-//}
-//
-
-#include <avr/io.h>
-#include <avr/interrupt.h>
-
 void setup(void)
 {
-    //Serial.begin(9600);
-    initToneGenerator();
-    setToneFrequency(1000L);
-    busyDelay(100000);
+	initToneGenerator();
+	setToneFrequency(1000);
+	busyDelay(100000L);
 }
+
 
 void busyDelay(long cycles) {
 	for (volatile long i = 0L; i < cycles; i++)
 		i++;
 }
 
+
+/**
+ * Given an ADC value and a number of switches and ADC value lookup table,
+ * return a bit mask stating which buttons are pressed.
+ */
+int
+get_bank_key_bits(int adc_value, int num_switches, const int *adc_values)
+{
+	int closest_delta;
+	int closest_bits = -1;
+	
+	for (int i = 0; i < 1<<num_switches; i++) {
+		int delta = abs(adc_values[i] - adc_value);
+		if (closest_bits == -1 || closest_delta > delta) {
+			closest_delta = delta;
+			closest_bits = i;
+		}
+	}
+	
+	return closest_bits;
+}
+
+
 void loop(void)
 {
 	// read the value from the sensor:
-	sensorValue = analogRead(sensorPin);
-	double resistance = 0.998/((double)sensorValue / 1024.0) - 0.998;
-	double closest_delta;
-	int    closest = -1;
-	for (int i = 0; i< 1<<4; i++) {
-		double delta = abs(keymap[i] - resistance);
-		if (closest == -1 || closest_delta > delta) {
-			closest = i;
-			closest_delta = delta;
-		}
-	}
-	//Serial.println(closest);
-	if (closest == 0)
-		setToneFrequency(0L);
+	int bank0_value = analogRead(bank_pins[0]);
+	int bank0_key_bits = get_bank_key_bits(bank0_value, BANK0_NUM_SWITCHES, BANK0_ADC_VALUES);
+	if (bank0_key_bits == 0)
+		setToneFrequency(0);
 	else
-		setToneFrequency((long)tones[closest]);
+		setToneFrequency(tones[bank0_key_bits]);
 }
 
 
@@ -112,6 +80,10 @@ void loop(void)
  * do it properly, an ISR is used to toggle the piezo rather than a PWM
  * generator...
  ******************************************************************************/
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
 
 void initToneGenerator(void)
 {
@@ -127,7 +99,7 @@ void initToneGenerator(void)
 	GTCCR = _BV(PSR1);
 	
 	// Initially don't make a sound
-	setToneFrequency(0L);
+	setToneFrequency(0);
 }
 
 
@@ -154,7 +126,7 @@ setToneFrequency(int freq)
 	if (freq > 0 && freq <= 20000) {
 		clock_div_code = blen(F_CPU/(freq*2)/256) + 1;
 		int clock_div = 1 << (clock_div_code-1);
-		compare = F_CPU/(freq*2L)/clock_div;
+		compare = F_CPU/(freq*2)/clock_div;
 	}
 	
 	cli();
